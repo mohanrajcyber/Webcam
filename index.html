@@ -23,6 +23,10 @@
           <input id="editModeToggle" type="checkbox" checked />
           <span>Edit mode on</span>
         </label>
+        <button id="refreshButton" class="ghost" type="button">Refresh from server</button>
+        <button id="healthCheckButton" type="button">
+          Check camera reachability
+        </button>
         <button id="simulateAlertButton" type="button">Simulate alert</button>
         <button id="resetButton" class="ghost" type="button">Reset demo</button>
       </section>
@@ -46,6 +50,18 @@
           <span id="activeAlerts">0</span>
           <p>Active alerts</p>
         </article>
+      </section>
+
+      <section class="connection-card" aria-label="Wireless access status">
+        <div>
+          <p class="eyebrow">Wireless monitor</p>
+          <h2 id="connectionMode">Local demo mode</h2>
+          <p>
+            Run the LAN server on the main camera system. Then phones, laptops,
+            and Macs on the same Wi-Fi can open the dashboard from these URLs.
+          </p>
+        </div>
+        <ul id="accessUrls" class="access-urls"></ul>
       </section>
 
       <section class="workspace">

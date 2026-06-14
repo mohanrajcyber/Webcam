@@ -31,7 +31,8 @@ body {
 
 button,
 input,
-select {
+select,
+code {
   font: inherit;
 }
 
@@ -124,6 +125,7 @@ h2 {
 .editor,
 .camera-card,
 .alerts-section,
+.connection-card,
 .metric {
   border: 1px solid var(--border);
   background: rgb(16 27 46 / 78%);
@@ -161,6 +163,53 @@ h2 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.connection-card {
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 420px);
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 1.2rem;
+  border-radius: 1.3rem;
+}
+
+.connection-card p {
+  max-width: 760px;
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.access-urls {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-urls li {
+  overflow-wrap: anywhere;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: rgb(255 255 255 / 6%);
+  color: var(--muted);
+}
+
+.access-urls a {
+  color: var(--accent);
+  font-weight: 850;
+  text-decoration: none;
+}
+
+code {
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.3rem;
+  background: rgb(0 0 0 / 32%);
+  color: var(--text);
 }
 
 .metric {
@@ -497,7 +546,8 @@ body:not(.edit-mode) .workspace {
 
 @media (max-width: 960px) {
   .hero,
-  .workspace {
+  .workspace,
+  .connection-card {
     grid-template-columns: 1fr;
   }
 

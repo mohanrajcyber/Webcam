@@ -60,7 +60,11 @@ const defaultState = {
   ],
 };
 
-const state = loadState();
+const state = {
+  ...loadLocalState(),
+  serverMode: false,
+  system: null,
+};
 
 const elements = {
   body: document.body,
@@ -77,15 +81,19 @@ const elements = {
   clearAlertsButton: document.querySelector("#clearAlertsButton"),
   resetButton: document.querySelector("#resetButton"),
   simulateAlertButton: document.querySelector("#simulateAlertButton"),
+  refreshButton: document.querySelector("#refreshButton"),
+  healthCheckButton: document.querySelector("#healthCheckButton"),
+  connectionMode: document.querySelector("#connectionMode"),
+  accessUrls: document.querySelector("#accessUrls"),
 };
 
-function loadState() {
+function loadLocalState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
 
     if (saved && Array.isArray(saved.cameras) && Array.isArray(saved.alerts)) {
       return {
-        ...defaultState,
+        ...structuredClone(defaultState),
         ...saved,
         editMode: saved.editMode ?? true,
       };
@@ -97,8 +105,66 @@ function loadState() {
   return structuredClone(defaultState);
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function saveLocalState() {
+  const { editMode, cameras, alerts } = state;
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ editMode, cameras, alerts }),
+  );
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function boot() {
+  render();
+
+  try {
+    const [system, cameraPayload, alertPayload] = await Promise.all([
+      apiRequest("/api/system"),
+      apiRequest("/api/cameras"),
+      apiRequest("/api/alerts"),
+    ]);
+
+    state.serverMode = true;
+    state.system = system;
+    state.cameras = cameraPayload.cameras;
+    state.alerts = alertPayload.alerts;
+  } catch (error) {
+    state.serverMode = false;
+    state.system = null;
+    console.info("Using browser-only demo mode", error);
+  }
+
+  render();
+}
+
+async function refreshFromServer() {
+  if (!state.serverMode) {
+    render();
+    return;
+  }
+
+  const [cameraPayload, alertPayload] = await Promise.all([
+    apiRequest("/api/cameras"),
+    apiRequest("/api/alerts"),
+  ]);
+  state.cameras = cameraPayload.cameras;
+  state.alerts = alertPayload.alerts;
+  render();
 }
 
 function render() {
@@ -108,10 +174,29 @@ function render() {
     ? "Edit mode is on: cards are editable."
     : "View mode: camera controls are hidden.";
 
+  renderConnection();
   renderMetrics();
   renderCameras();
   renderAlerts();
-  saveState();
+  saveLocalState();
+}
+
+function renderConnection() {
+  elements.connectionMode.textContent = state.serverMode
+    ? "LAN server mode"
+    : "Local demo mode";
+  elements.healthCheckButton.disabled = !state.serverMode;
+  elements.refreshButton.disabled = !state.serverMode;
+
+  if (!state.serverMode || !state.system?.accessUrls?.length) {
+    elements.accessUrls.innerHTML =
+      "<li>Run <code>python3 lan_monitor_server.py</code> on the main camera system for phone/laptop access.</li>";
+    return;
+  }
+
+  elements.accessUrls.innerHTML = state.system.accessUrls
+    .map((url) => `<li><a href="${url}">${url}</a></li>`)
+    .join("");
 }
 
 function renderMetrics() {
@@ -184,7 +269,7 @@ function renderAlerts() {
     });
 }
 
-function addCamera(formData) {
+async function addCamera(formData) {
   const camera = {
     id: `cam-${crypto.randomUUID()}`,
     name: formData.get("name").trim(),
@@ -195,11 +280,20 @@ function addCamera(formData) {
     status: "online",
   };
 
-  state.cameras.unshift(camera);
+  if (state.serverMode) {
+    const payload = await apiRequest("/api/cameras", {
+      method: "POST",
+      body: JSON.stringify(camera),
+    });
+    state.cameras.unshift(payload.camera);
+  } else {
+    state.cameras.unshift(camera);
+  }
+
   render();
 }
 
-function updateCameraStatus(cameraId, status) {
+async function updateCameraStatus(cameraId, status) {
   const camera = state.cameras.find((item) => item.id === cameraId);
 
   if (!camera) {
@@ -208,14 +302,44 @@ function updateCameraStatus(cameraId, status) {
 
   camera.status = status;
 
+  if (state.serverMode) {
+    await apiRequest(`/api/cameras/${encodeURIComponent(cameraId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    await refreshFromServer();
+    return;
+  }
+
   if (status !== "online") {
-    addAlert(camera, status === "offline" ? "Camera offline" : camera.rule);
+    addLocalAlert(camera, status === "offline" ? "Camera offline" : camera.rule);
   }
 
   render();
 }
 
-function addAlert(camera, rule = camera.rule) {
+async function raiseAlert(cameraId) {
+  const camera = state.cameras.find((item) => item.id === cameraId);
+
+  if (!camera) {
+    return;
+  }
+
+  if (state.serverMode) {
+    await apiRequest("/api/alerts", {
+      method: "POST",
+      body: JSON.stringify({ cameraId, rule: camera.rule }),
+    });
+    await refreshFromServer();
+    return;
+  }
+
+  camera.status = camera.status === "online" ? "warning" : camera.status;
+  addLocalAlert(camera);
+  render();
+}
+
+function addLocalAlert(camera, rule = camera.rule) {
   const existingSimilarAlert = state.alerts.find(
     (alert) => alert.cameraId === camera.id && alert.rule === rule,
   );
@@ -250,20 +374,75 @@ function buildAlertMessage(camera, rule) {
   return messages[rule] || `Irregularity detected at ${camera.location}.`;
 }
 
-function deleteCamera(cameraId) {
+async function deleteCamera(cameraId) {
+  if (state.serverMode) {
+    await apiRequest(`/api/cameras/${encodeURIComponent(cameraId)}`, {
+      method: "DELETE",
+    });
+    await refreshFromServer();
+    return;
+  }
+
   state.cameras = state.cameras.filter((camera) => camera.id !== cameraId);
   state.alerts = state.alerts.filter((alert) => alert.cameraId !== cameraId);
   render();
 }
 
-function simulateAlert() {
+async function simulateAlert() {
   if (state.cameras.length === 0) {
     return;
   }
 
   const camera = state.cameras[Math.floor(Math.random() * state.cameras.length)];
-  camera.status = camera.status === "offline" ? "warning" : camera.status;
-  addAlert(camera);
+  await raiseAlert(camera.id);
+}
+
+async function runHealthCheck() {
+  if (!state.serverMode) {
+    return;
+  }
+
+  elements.healthCheckButton.disabled = true;
+  elements.healthCheckButton.textContent = "Checking...";
+
+  try {
+    const payload = await apiRequest("/api/health-check", { method: "POST" });
+    state.cameras = payload.state.cameras;
+    state.alerts = payload.state.alerts;
+  } finally {
+    elements.healthCheckButton.textContent = "Check camera reachability";
+    elements.healthCheckButton.disabled = false;
+    render();
+  }
+}
+
+async function resetDashboard() {
+  if (state.serverMode) {
+    const payload = await apiRequest("/api/reset", { method: "POST" });
+    state.cameras = payload.state.cameras;
+    state.alerts = payload.state.alerts;
+    state.editMode = payload.state.editMode ?? true;
+    render();
+    return;
+  }
+
+  localStorage.removeItem(STORAGE_KEY);
+  Object.assign(state, structuredClone(defaultState), {
+    serverMode: false,
+    system: null,
+  });
+  render();
+}
+
+async function clearAlerts() {
+  if (state.serverMode) {
+    await apiRequest("/api/alerts", { method: "DELETE" });
+    state.alerts = [];
+    render();
+    return;
+  }
+
+  state.alerts = [];
   render();
 }
 
@@ -276,7 +455,7 @@ function formatTime(value) {
 }
 
 function escapeHtml(value) {
-  return value
+  return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -289,13 +468,13 @@ elements.editModeToggle.addEventListener("change", (event) => {
   render();
 });
 
-elements.cameraForm.addEventListener("submit", (event) => {
+elements.cameraForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  addCamera(new FormData(event.currentTarget));
+  await addCamera(new FormData(event.currentTarget));
   event.currentTarget.reset();
 });
 
-elements.cameraGrid.addEventListener("click", (event) => {
+elements.cameraGrid.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   const card = event.target.closest(".camera-card");
 
@@ -306,42 +485,30 @@ elements.cameraGrid.addEventListener("click", (event) => {
   const { cameraId } = card.dataset;
 
   if (button.classList.contains("mark-online")) {
-    updateCameraStatus(cameraId, "online");
+    await updateCameraStatus(cameraId, "online");
   }
 
   if (button.classList.contains("mark-warning")) {
-    updateCameraStatus(cameraId, "warning");
+    await updateCameraStatus(cameraId, "warning");
   }
 
   if (button.classList.contains("mark-offline")) {
-    updateCameraStatus(cameraId, "offline");
+    await updateCameraStatus(cameraId, "offline");
   }
 
   if (button.classList.contains("raise-alert")) {
-    const camera = state.cameras.find((item) => item.id === cameraId);
-    if (camera) {
-      camera.status = camera.status === "online" ? "warning" : camera.status;
-      addAlert(camera);
-      render();
-    }
+    await raiseAlert(cameraId);
   }
 
   if (button.classList.contains("delete-camera")) {
-    deleteCamera(cameraId);
+    await deleteCamera(cameraId);
   }
 });
 
-elements.clearAlertsButton.addEventListener("click", () => {
-  state.alerts = [];
-  render();
-});
-
-elements.resetButton.addEventListener("click", () => {
-  localStorage.removeItem(STORAGE_KEY);
-  Object.assign(state, structuredClone(defaultState));
-  render();
-});
-
+elements.clearAlertsButton.addEventListener("click", clearAlerts);
+elements.resetButton.addEventListener("click", resetDashboard);
 elements.simulateAlertButton.addEventListener("click", simulateAlert);
+elements.refreshButton.addEventListener("click", refreshFromServer);
+elements.healthCheckButton.addEventListener("click", runHealthCheck);
 
-render();
+boot();
