@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Webcam CCTV Command Center</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Wired IP camera monitoring</p>
+        <h1>AI CCTV Command Center</h1>
+        <p class="hero-copy">
+          Watch camera health, network drops, and company irregularities from one
+          screen. Edit mode is enabled by default so every camera can be managed
+          during setup.
+        </p>
+      </div>
+
+      <section class="control-panel" aria-label="Dashboard controls">
+        <label class="switch">
+          <input id="editModeToggle" type="checkbox" checked />
+          <span>Edit mode on</span>
+        </label>
+        <button id="simulateAlertButton" type="button">Simulate alert</button>
+        <button id="resetButton" class="ghost" type="button">Reset demo</button>
+      </section>
+    </header>
+
+    <main>
+      <section class="summary-grid" aria-label="Camera summary">
+        <article class="metric">
+          <span id="totalCameras">0</span>
+          <p>Total cameras</p>
+        </article>
+        <article class="metric good">
+          <span id="onlineCameras">0</span>
+          <p>Online</p>
+        </article>
+        <article class="metric danger">
+          <span id="issueCameras">0</span>
+          <p>Needs attention</p>
+        </article>
+        <article class="metric warning">
+          <span id="activeAlerts">0</span>
+          <p>Active alerts</p>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <aside class="editor" aria-label="Add camera">
+          <h2>Add camera</h2>
+          <form id="cameraForm">
+            <label>
+              Camera name
+              <input name="name" required placeholder="Warehouse Gate 01" />
+            </label>
+            <label>
+              Location
+              <input name="location" required placeholder="Warehouse / Gate" />
+            </label>
+            <label>
+              RTSP or stream URL
+              <input
+                name="streamUrl"
+                placeholder="rtsp://user:password@192.168.1.10:554/stream"
+              />
+            </label>
+            <label>
+              Zone type
+              <select name="zone">
+                <option>Restricted Area</option>
+                <option>Warehouse</option>
+                <option>Parking</option>
+                <option>Office</option>
+                <option>Perimeter</option>
+              </select>
+            </label>
+            <label>
+              Monitoring rule
+              <select name="rule">
+                <option>After-hours motion</option>
+                <option>Camera tamper / covered</option>
+                <option>Person in restricted area</option>
+                <option>Fire or smoke</option>
+                <option>Vehicle wrong parking</option>
+                <option>PPE / helmet missing</option>
+              </select>
+            </label>
+            <button type="submit">Add to dashboard</button>
+          </form>
+        </aside>
+
+        <section class="camera-section">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">Live overview</p>
+              <h2>All cameras</h2>
+            </div>
+            <p id="editHint" class="hint">Edit mode is on: cards are editable.</p>
+          </div>
+          <div id="cameraGrid" class="camera-grid"></div>
+        </section>
+      </section>
+
+      <section class="alerts-section" aria-label="Alert history">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Irregularities</p>
+            <h2>Alert timeline</h2>
+          </div>
+          <button id="clearAlertsButton" class="ghost" type="button">
+            Clear alerts
+          </button>
+        </div>
+        <ol id="alertList" class="alert-list"></ol>
+      </section>
+    </main>
+
+    <template id="cameraCardTemplate">
+      <article class="camera-card">
+        <div class="feed">
+          <span class="status-dot" aria-hidden="true"></span>
+          <strong class="feed-label"></strong>
+        </div>
+        <div class="camera-content">
+          <div class="camera-header">
+            <div>
+              <h3 class="camera-name"></h3>
+              <p class="camera-location"></p>
+            </div>
+            <span class="status-pill"></span>
+          </div>
+          <dl class="camera-meta">
+            <div>
+              <dt>Zone</dt>
+              <dd class="camera-zone"></dd>
+            </div>
+            <div>
+              <dt>Rule</dt>
+              <dd class="camera-rule"></dd>
+            </div>
+            <div>
+              <dt>Stream</dt>
+              <dd class="camera-stream"></dd>
+            </div>
+          </dl>
+          <div class="card-actions edit-only">
+            <button class="mark-online" type="button">Online</button>
+            <button class="mark-warning" type="button">Warning</button>
+            <button class="mark-offline" type="button">Offline</button>
+            <button class="raise-alert" type="button">Raise alert</button>
+            <button class="delete-camera danger-button" type="button">Delete</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
